@@ -9,9 +9,12 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"regexp"
 
+	"github.com/Sirupsen/logrus"
 	"github.com/docker/distribution/digest"
 	engineapi "github.com/docker/engine-api/client"
+	"github.com/docker/engine-api/types/versions"
 	"golang.org/x/net/context"
 )
 
@@ -41,7 +44,7 @@ func (b *buildCache) Get(ctx context.Context, graphdir, image string) (io.ReadCl
 
 	if _, err := os.Stat(filepath.Join(imagedir, "imagedb/content/sha256", id.Hex())); err != nil {
 		if os.IsNotExist(err) {
-			return nil, fmt.Errorf("Could not access files from the Docker storage directory %v. This application currently requires direct access to this directory for saving build cache. Use \"--graph\" option to specify different folder.", graphdir)
+			return b.GetWithRemoteAPI(ctx, image)
 		}
 	}
 	pc, err := b.getParentChain(ctx, imagedir, id)
@@ -53,6 +56,112 @@ func (b *buildCache) Get(ctx context.Context, graphdir, image string) (io.ReadCl
 	}
 
 	return b.writeCacheTar(ctx, pc), nil
+}
+
+func (b *buildCache) GetWithRemoteAPI(ctx context.Context, image string) (io.ReadCloser, error) {
+	v, err := b.client.ServerVersion(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	if versions.LessThan(v.Version, "1.11.0") {
+		return nil, fmt.Errorf("Buildcache needs at least Docker version v1.11")
+	}
+
+	if versions.LessThan(v.Version, "1.12.0") {
+		logrus.Warnf("Docker versions before v1.12.0 have a bug causing extracting build cache through remote API to take very long time and use lots of disk space. Please consider upgrading before using this tool.")
+	}
+
+	id, err := b.getImageID(ctx, image)
+	if err != nil {
+		return nil, err
+	}
+
+	ids, err := b.getParentIDS(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	rc, err := b.client.ImageSave(ctx, ids)
+	if err != nil {
+		return nil, err
+	}
+
+	return b.filterSaveArchive(rc), nil
+}
+
+func (b *buildCache) getParentIDS(ctx context.Context, id digest.Digest) ([]string, error) {
+	inspect, _, err := b.client.ImageInspectWithRaw(ctx, string(id), false)
+	if err != nil {
+		return nil, err
+	}
+	out := []string{string(id)}
+	if inspect.Parent != "" {
+		parent, err := digest.ParseDigest(inspect.Parent)
+		if err != nil {
+			return nil, err
+		}
+		rest, err := b.getParentIDS(ctx, parent)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, rest...)
+	}
+	return out, nil
+}
+
+func (b *buildCache) filterSaveArchive(in io.ReadCloser) io.ReadCloser {
+	pr, pw := io.Pipe()
+	go func() {
+		gz := gzip.NewWriter(pw)
+		tarReader := tar.NewReader(in)
+		tarWriter := tar.NewWriter(gz)
+
+		defer in.Close()
+
+		blacklist := regexp.MustCompile("^[0-9a-f]{64}/")
+
+		for {
+			hdr, err := tarReader.Next()
+			if err == io.EOF {
+				break
+			}
+			if err != nil {
+				pw.CloseWithError(err)
+				return
+			}
+
+			if blacklist.MatchString(hdr.Name) {
+				_, err := io.Copy(ioutil.Discard, tarReader)
+				if err != nil {
+					pw.CloseWithError(err)
+					return
+				}
+				continue
+			}
+
+			if err := tarWriter.WriteHeader(hdr); err != nil {
+				pw.CloseWithError(err)
+				return
+			}
+
+			if _, err := io.Copy(tarWriter, tarReader); err != nil {
+				pw.CloseWithError(err)
+				return
+			}
+		}
+
+		if err := tarWriter.Close(); err != nil {
+			pw.CloseWithError(err)
+			return
+		}
+		if err := gz.Close(); err != nil {
+			pw.CloseWithError(err)
+			return
+		}
+		pw.Close()
+	}()
+	return pr
 }
 
 func (b *buildCache) writeCacheTar(ctx context.Context, imgs []image) io.ReadCloser {
