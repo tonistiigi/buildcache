@@ -91,7 +91,7 @@ func (b *buildCache) GetWithRemoteAPI(ctx context.Context, image string) (io.Rea
 }
 
 func (b *buildCache) getParentIDS(ctx context.Context, id digest.Digest) ([]string, error) {
-	inspect, _, err := b.client.ImageInspectWithRaw(ctx, string(id), false)
+	inspect, _, err := b.client.ImageInspectWithRaw(ctx, string(id))
 	if err != nil {
 		return nil, err
 	}
@@ -227,7 +227,7 @@ func (b *buildCache) writeCacheTar(ctx context.Context, imgs []image) io.ReadClo
 }
 
 func (b *buildCache) getImageID(ctx context.Context, ref string) (digest.Digest, error) {
-	inspect, _, err := b.client.ImageInspectWithRaw(ctx, ref, false)
+	inspect, _, err := b.client.ImageInspectWithRaw(ctx, ref)
 	if err != nil {
 		return "", err
 	}
