@@ -32,3 +32,5 @@ If `docker load` succeeds but cache still isn't being used in another machine tr
 #### compatibility
 
 Buildcache works with Docker v1.12 using only the remote API. To use buildcache in Docker v1.11 it needs to access the Docker storage directory directly. Use `-g` options to specify directory other than `/var/lib/docker`. Eariler Docker versions are not supported.
+
+**Note**: Docker 1.13 added support for `--cache-from` flag to the build command, replacing the need for this tool.

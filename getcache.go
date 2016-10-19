@@ -72,6 +72,10 @@ func (b *buildCache) GetWithRemoteAPI(ctx context.Context, image string) (io.Rea
 		logrus.Warnf("Docker versions before v1.12.0 have a bug causing extracting build cache through remote API to take very long time and use lots of disk space. Please consider upgrading before using this tool.")
 	}
 
+	if versions.GreaterThanOrEqualTo(v.Version, "1.13.0") {
+		logrus.Warnf("Docker versions since v1.13.0 provide --cache-from flag to build command, consider using this instead")
+	}
+
 	id, err := b.getImageID(ctx, image)
 	if err != nil {
 		return nil, err
