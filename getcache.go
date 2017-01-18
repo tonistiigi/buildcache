@@ -12,9 +12,9 @@ import (
 	"regexp"
 
 	"github.com/Sirupsen/logrus"
-	"github.com/docker/distribution/digest"
-	engineapi "github.com/docker/engine-api/client"
-	"github.com/docker/engine-api/types/versions"
+	"github.com/docker/docker/api/types/versions"
+	engineapi "github.com/docker/docker/client"
+	digest "github.com/opencontainers/go-digest"
 	"golang.org/x/net/context"
 )
 
@@ -104,7 +104,7 @@ func (b *buildCache) getParentIDS(ctx context.Context, id digest.Digest) ([]stri
 	}
 	out := []string{string(id)}
 	if inspect.Parent != "" {
-		parent, err := digest.ParseDigest(inspect.Parent)
+		parent, err := digest.Parse(inspect.Parent)
 		if err != nil {
 			return nil, err
 		}
@@ -238,7 +238,7 @@ func (b *buildCache) getImageID(ctx context.Context, ref string) (digest.Digest,
 	if err != nil {
 		return "", err
 	}
-	return digest.ParseDigest(inspect.ID)
+	return digest.Parse(inspect.ID)
 }
 
 func (b *buildCache) getParentChain(ctx context.Context, dir string, id digest.Digest) ([]image, error) {
@@ -267,7 +267,7 @@ func (b *buildCache) getParentChain(ctx context.Context, dir string, id digest.D
 		return nil, err
 	}
 
-	parentID, err := digest.ParseDigest(string(parent))
+	parentID, err := digest.Parse(string(parent))
 	if err != nil {
 		return nil, err
 	}

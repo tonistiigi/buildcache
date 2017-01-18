@@ -10,7 +10,7 @@ import (
 	"syscall"
 
 	"github.com/Sirupsen/logrus"
-	engineapi "github.com/docker/engine-api/client"
+	engineapi "github.com/docker/docker/client"
 	humanize "github.com/dustin/go-humanize"
 	"github.com/spf13/cobra"
 	"github.com/tonistiigi/buildcache"
