@@ -43,7 +43,10 @@ func (b *buildCache) Get(ctx context.Context, graphdir, image string) (io.ReadCl
 	imagedir := filepath.Join(graphdir, "image", info.Driver)
 
 	if _, err := os.Stat(filepath.Join(imagedir, "imagedb/content/sha256", id.Hex())); err != nil {
-		if os.IsNotExist(err) {
+		if os.IsNotExist(err) || os.IsPermission(err) {
+			if os.IsPermission(err) {
+				logrus.Warnf("Invalid permissions to access local image data. Retrying through remote API.")
+			}
 			return b.GetWithRemoteAPI(ctx, image)
 		}
 	}
