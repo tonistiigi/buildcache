@@ -6,3 +6,9 @@ install: binary
 
 fmt:
 	go fmt ./...
+
+vendor: vendor.conf
+	vndr
+	
+.PHONY:
+	vendor binary install fmt
